@@ -116,6 +116,7 @@ app.get('/admin', (req, res) => {
   const total = guests.length;
   const checkedIn = guests.filter(g => g.checkedIn).length;
   const emailedIds = new Set(db.emailed || []);
+  const pendingDuplicates = db.pendingDuplicates || [];
   const checkedInList = guests.filter(g => g.checkedIn).sort((a, b) => a.checkedInAt > b.checkedInAt ? -1 : 1);
   const notCheckedIn = guests.filter(g => !g.checkedIn).sort((a, b) => a.lastName > b.lastName ? 1 : -1);
 
@@ -186,6 +187,18 @@ app.get('/admin', (req, res) => {
           <b>Replace</b> — wipes everything and starts fresh.
         </p>
         <input type="file" id="csvFile" accept=".csv" style="margin-bottom:8px;font-size:0.85rem;">
+        <p style="font-size:0.8rem;color:#555;margin:4px 0 6px;"><b>Duplicate handling:</b></p>
+        <div style="margin-bottom:8px;">
+          <label style="font-size:0.82rem;margin-right:12px;">
+            <input type="radio" name="dedup" value="none" checked> None (email dedup only)
+          </label>
+          <label style="font-size:0.82rem;margin-right:12px;">
+            <input type="radio" name="dedup" value="auto"> Auto-remove likely duplicates
+          </label>
+          <label style="font-size:0.82rem;">
+            <input type="radio" name="dedup" value="manual"> Flag for manual review
+          </label>
+        </div>
         <div>
           <button class="btn btn-blue" onclick="uploadCSV('merge')">📋 Merge</button>
           <button class="btn btn-red" onclick="uploadCSV('replace')">⚠️ Replace All</button>
@@ -213,6 +226,27 @@ app.get('/admin', (req, res) => {
 
       <div id="log"></div>
     </div>
+
+    ${pendingDuplicates.length > 0 ? `
+    <div class="card" style="border:2px solid #faad14;">
+      <h2>⚠️ Possible Duplicates (${pendingDuplicates.length}) — Review Required</h2>
+      <p style="font-size:0.8rem;color:#888;margin:0 0 12px;">For each pair, remove one or keep both.</p>
+      <table>
+        <tr><th>Guest A</th><th>Guest B</th><th>Reason</th><th>Action</th></tr>
+        ${pendingDuplicates.map((d, i) => `
+          <tr>
+            <td>${d.a.firstName} ${d.a.lastName}<br><span style="color:#aaa;font-size:0.75rem;">${d.a.email}</span></td>
+            <td>${d.b.firstName} ${d.b.lastName}<br><span style="color:#aaa;font-size:0.75rem;">${d.b.email}</span></td>
+            <td style="color:#d48806;font-size:0.8rem;">${d.reason}</td>
+            <td>
+              <button class="btn btn-red" style="font-size:0.75rem;padding:5px 8px;" onclick="removeGuest('${d.a.id}')">Remove A</button>
+              <button class="btn btn-red" style="font-size:0.75rem;padding:5px 8px;" onclick="removeGuest('${d.b.id}')">Remove B</button>
+              <button class="btn btn-gray" style="font-size:0.75rem;padding:5px 8px;" onclick="dismissDuplicate('${d.a.id}','${d.b.id}')">Keep Both</button>
+            </td>
+          </tr>`).join('')}
+      </table>
+      <div id="dupMsg"></div>
+    </div>` : ''}
 
     <div class="card">
       <h2>✅ Checked in (${checkedIn})</h2>
@@ -294,12 +328,13 @@ app.get('/admin', (req, res) => {
       const fileInput = document.getElementById('csvFile');
       if (!fileInput.files.length) { alert('Please select a CSV file first.'); return; }
       if (mode === 'replace' && !confirm('This will wipe ALL guests and check-ins. Are you sure?')) return;
+      const dedup = document.querySelector('input[name="dedup"]:checked').value;
       showMsg('uploadMsg', true, 'Uploading...');
       const reader = new FileReader();
       reader.onload = async function(e) {
         try {
           const csv = e.target.result;
-          const r = await fetch('/setup/upload-csv?pw=' + pw + '&mode=' + mode, {
+          const r = await fetch('/setup/upload-csv?pw=' + pw + '&mode=' + mode + '&dedup=' + dedup, {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
             body: JSON.stringify({ csv })
@@ -312,6 +347,29 @@ app.get('/admin', (req, res) => {
         }
       };
       reader.readAsText(fileInput.files[0]);
+    }
+
+    async function removeGuest(id) {
+      if (!confirm('Remove this guest? This cannot be undone.')) return;
+      const r = await fetch('/setup/remove-guest?pw=' + pw, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ id })
+      });
+      const d = await r.json();
+      showMsg('dupMsg', d.ok, d.message);
+      if (d.ok) setTimeout(() => location.reload(), 1500);
+    }
+
+    async function dismissDuplicate(aId, bId) {
+      const r = await fetch('/setup/dismiss-duplicate?pw=' + pw, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ aId, bId })
+      });
+      const d = await r.json();
+      showMsg('dupMsg', d.ok, d.message);
+      if (d.ok) setTimeout(() => location.reload(), 1500);
     }
 
     async function sendEmails(mode) {
@@ -391,9 +449,9 @@ app.post('/setup/add-guest', (req, res) => {
   }
 });
 
-// ── Upload CSV (merge or replace) ────────────────────────────────────────────
+// ── Upload CSV (merge or replace, with dedup option) ─────────────────────────
 app.post('/setup/upload-csv', (req, res) => {
-  const { pw, mode } = req.query;
+  const { pw, mode, dedup } = req.query;
   if (pw !== process.env.ADMIN_PASSWORD) return res.status(401).json({ ok: false, message: 'Unauthorized' });
   try {
     const { csv } = req.body;
@@ -401,13 +459,16 @@ app.post('/setup/upload-csv', (req, res) => {
     fs.writeFileSync(path.join(__dirname, 'submissions.csv'), csv, 'utf8');
     const { parse } = require('csv-parse/sync');
     const records = parse(csv, { columns: true, skip_empty_lines: true });
+
+    // Step 1: deduplicate by email (keep latest submission)
     const byEmail = {};
     records.forEach(r => {
       const email = (r.contactEmail || '').trim().toLowerCase();
       if (!email) return;
       if (!byEmail[email] || r.SubmissionId > byEmail[email].SubmissionId) byEmail[email] = r;
     });
-    const newGuests = Object.values(byEmail).map(r => ({
+
+    const allGuests = Object.values(byEmail).map(r => ({
       id: r.SubmissionId,
       firstName: (r.firstName || '').trim(),
       lastName: (r.lastName || '').trim(),
@@ -415,14 +476,92 @@ app.post('/setup/upload-csv', (req, res) => {
       city: (r.contactCity || '').trim()
     })).filter(g => g.email && g.firstName);
 
-    const db = mode === 'replace' ? { guests: {}, checkins: [], emailed: [] } : loadDB();
+    // Step 2: find possible duplicates (same last name + similar email domain)
+    const possibleDuplicates = [];
+    if (dedup === 'auto' || dedup === 'manual') {
+      for (let i = 0; i < allGuests.length; i++) {
+        for (let j = i + 1; j < allGuests.length; j++) {
+          const a = allGuests[i], b = allGuests[j];
+          const sameLast = a.lastName.toLowerCase() === b.lastName.toLowerCase();
+          const aDomain = a.email.split('@')[1] || '';
+          const bDomain = b.email.split('@')[1] || '';
+          const sameDomain = aDomain === bDomain;
+          const similarFirst = a.firstName.toLowerCase().includes(b.firstName.toLowerCase().slice(0,3)) ||
+                               b.firstName.toLowerCase().includes(a.firstName.toLowerCase().slice(0,3));
+          if (sameLast && (sameDomain || similarFirst)) {
+            possibleDuplicates.push({ a, b, reason: sameLast && sameDomain ? 'Same last name + email domain' : 'Same last name + similar first name' });
+          }
+        }
+      }
+    }
+
+    // Auto mode: remove the one with the lower SubmissionId from duplicate pairs
+    let autoRemoved = 0;
+    const removedIds = new Set();
+    if (dedup === 'auto') {
+      possibleDuplicates.forEach(({ a, b }) => {
+        const toRemove = a.id < b.id ? a.id : b.id;
+        removedIds.add(String(toRemove));
+        autoRemoved++;
+      });
+    }
+
+    const finalGuests = allGuests.filter(g => !removedIds.has(String(g.id)));
+
+    // Manual mode: save duplicates for review, load all guests
+    if (dedup === 'manual' && possibleDuplicates.length > 0) {
+      const db = loadDB();
+      db.pendingDuplicates = possibleDuplicates;
+      saveDB(db);
+    }
+
+    const db = mode === 'replace' ? { guests: {}, checkins: [], emailed: [], pendingDuplicates: [] } : loadDB();
     let added = 0;
-    newGuests.forEach(g => {
+    finalGuests.forEach(g => {
       if (!db.guests[g.id]) { db.guests[g.id] = { ...g, checkedIn: false, checkedInAt: null }; added++; }
     });
+    if (!db.pendingDuplicates) db.pendingDuplicates = [];
+    if (dedup === 'manual') db.pendingDuplicates = possibleDuplicates;
     saveDB(db);
+
     const action = mode === 'replace' ? 'Replaced all guests' : `Added ${added} new guests`;
-    res.json({ ok: true, message: `✓ ${action}. Total: ${Object.keys(db.guests).length} guests in database.` });
+    let msg = `✓ ${action}. Total: ${Object.keys(db.guests).length} guests in database.`;
+    if (dedup === 'auto' && autoRemoved > 0) msg += ` Auto-removed ${autoRemoved} likely duplicate(s).`;
+    if (dedup === 'manual' && possibleDuplicates.length > 0) msg += ` Found ${possibleDuplicates.length} possible duplicate(s) — review below.`;
+    res.json({ ok: true, message: msg, hasDuplicates: dedup === 'manual' && possibleDuplicates.length > 0 });
+  } catch (err) {
+    res.json({ ok: false, message: 'Error: ' + err.message });
+  }
+});
+
+// ── Remove duplicate guest ───────────────────────────────────────────────────
+app.post('/setup/remove-guest', (req, res) => {
+  const { pw } = req.query;
+  if (pw !== process.env.ADMIN_PASSWORD) return res.status(401).json({ ok: false, message: 'Unauthorized' });
+  try {
+    const { id } = req.body;
+    const db = loadDB();
+    if (!db.guests[id]) return res.json({ ok: false, message: 'Guest not found.' });
+    const name = `${db.guests[id].firstName} ${db.guests[id].lastName}`;
+    delete db.guests[id];
+    db.pendingDuplicates = (db.pendingDuplicates || []).filter(d => d.a.id !== id && d.b.id !== id);
+    saveDB(db);
+    res.json({ ok: true, message: `✓ Removed ${name}.` });
+  } catch (err) {
+    res.json({ ok: false, message: 'Error: ' + err.message });
+  }
+});
+
+// ── Keep both duplicates (dismiss) ──────────────────────────────────────────
+app.post('/setup/dismiss-duplicate', (req, res) => {
+  const { pw } = req.query;
+  if (pw !== process.env.ADMIN_PASSWORD) return res.status(401).json({ ok: false, message: 'Unauthorized' });
+  try {
+    const { aId, bId } = req.body;
+    const db = loadDB();
+    db.pendingDuplicates = (db.pendingDuplicates || []).filter(d => !(d.a.id === aId && d.b.id === bId));
+    saveDB(db);
+    res.json({ ok: true, message: 'Dismissed — both guests kept.' });
   } catch (err) {
     res.json({ ok: false, message: 'Error: ' + err.message });
   }
