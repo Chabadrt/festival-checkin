@@ -185,9 +185,11 @@ app.get('/admin', (req, res) => {
           <b>Merge</b> — adds new guests, keeps existing check-ins.<br>
           <b>Replace</b> — wipes everything and starts fresh.
         </p>
-        <textarea id="csvData" placeholder="Paste CSV contents here..."></textarea>
-        <button class="btn btn-blue" onclick="uploadCSV('merge')">📋 Merge</button>
-        <button class="btn btn-red" onclick="uploadCSV('replace')">⚠️ Replace All</button>
+        <input type="file" id="csvFile" accept=".csv" style="margin-bottom:8px;font-size:0.85rem;">
+        <div>
+          <button class="btn btn-blue" onclick="uploadCSV('merge')">📋 Merge</button>
+          <button class="btn btn-red" onclick="uploadCSV('replace')">⚠️ Replace All</button>
+        </div>
         <div id="uploadMsg"></div>
       </div>
     </div>
@@ -289,22 +291,27 @@ app.get('/admin', (req, res) => {
     }
 
     async function uploadCSV(mode) {
-      const csv = document.getElementById('csvData').value.trim();
-      if (!csv) { alert('Please paste CSV data first.'); return; }
+      const fileInput = document.getElementById('csvFile');
+      if (!fileInput.files.length) { alert('Please select a CSV file first.'); return; }
       if (mode === 'replace' && !confirm('This will wipe ALL guests and check-ins. Are you sure?')) return;
       showMsg('uploadMsg', true, 'Uploading...');
-      try {
-        const r = await fetch('/setup/upload-csv?pw=' + pw + '&mode=' + mode, {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ csv })
-        });
-        const d = await r.json();
-        showMsg('uploadMsg', d.ok, d.message);
-        if (d.ok) setTimeout(() => location.reload(), 2000);
-      } catch(err) {
-        showMsg('uploadMsg', false, 'Error: ' + err.message);
-      }
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        try {
+          const csv = e.target.result;
+          const r = await fetch('/setup/upload-csv?pw=' + pw + '&mode=' + mode, {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ csv })
+          });
+          const d = await r.json();
+          showMsg('uploadMsg', d.ok, d.message);
+          if (d.ok) setTimeout(() => location.reload(), 2000);
+        } catch(err) {
+          showMsg('uploadMsg', false, 'Error: ' + err.message);
+        }
+      };
+      reader.readAsText(fileInput.files[0]);
     }
 
     async function sendEmails(mode) {
