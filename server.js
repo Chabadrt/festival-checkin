@@ -249,7 +249,7 @@ app.get('/setup', (req, res) => {
       <h2>Step 1 — Upload CSV</h2>
       <p style="font-size:0.9rem;color:#666;">Open your submissions CSV, select all (Ctrl+A), copy (Ctrl+C), paste below.</p>
       <textarea id="csvData" placeholder="Paste CSV contents here..."></textarea>
-      <button onclick="uploadCSV()">Upload CSV</button>
+      <button id="uploadBtn" style="margin-top:10px;">Upload CSV</button>
       <div id="csvStatus"></div>
     </div>
 
@@ -259,10 +259,10 @@ app.get('/setup', (req, res) => {
         <strong>Test mode</strong> sends 3 emails to your own address first.<br>
         <strong>Send all</strong> sends to all guests — only do this once!
       </p>
-      <button onclick="sendEmails('test')" style="background:#d48806;margin-bottom:8px;">
+      <button id="testBtn" style="background:#d48806;margin-bottom:8px;">
         Send Test (3 emails to me)
       </button>
-      <button onclick="sendEmails('all')" class="red">
+      <button id="sendAllBtn" class="red">
         Send to ALL Guests
       </button>
       <div id="log"></div>
@@ -271,32 +271,48 @@ app.get('/setup', (req, res) => {
     <script>
     const pw = new URLSearchParams(window.location.search).get('pw');
 
+    window.onload = function() {
+      document.getElementById('uploadBtn').addEventListener('click', uploadCSV);
+      document.getElementById('testBtn').addEventListener('click', function(){ sendEmails('test'); });
+      document.getElementById('sendAllBtn').addEventListener('click', function(){ sendEmails('all'); });
+    };
+
     async function uploadCSV() {
       const data = document.getElementById('csvData').value.trim();
-      if (!data) return alert('Please paste CSV data first.');
-      const res = await fetch('/setup/upload-csv?pw=' + pw, {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ csv: data })
-      });
-      const json = await res.json();
-      document.getElementById('csvStatus').innerHTML =
-        '<div class="status ' + (json.ok ? 'ok' : 'warn') + '">' + json.message + '</div>';
-      if (json.ok) setTimeout(() => location.reload(), 1500);
+      if (!data) { alert('Please paste CSV data first.'); return; }
+      document.getElementById('csvStatus').innerHTML = '<div class="status warn">Uploading...</div>';
+      try {
+        const res = await fetch('/setup/upload-csv?pw=' + pw, {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ csv: data })
+        });
+        const json = await res.json();
+        document.getElementById('csvStatus').innerHTML =
+          '<div class="status ' + (json.ok ? 'ok' : 'warn') + '">' + json.message + '</div>';
+        if (json.ok) setTimeout(() => location.reload(), 2000);
+      } catch(err) {
+        document.getElementById('csvStatus').innerHTML =
+          '<div class="status warn">Error: ' + err.message + '</div>';
+      }
     }
 
     async function sendEmails(mode) {
       const log = document.getElementById('log');
       log.style.display = 'block';
       log.textContent = 'Starting...\n';
-      const res = await fetch('/setup/send?pw=' + pw + '&mode=' + mode);
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        log.textContent += decoder.decode(value);
-        log.scrollTop = log.scrollHeight;
+      try {
+        const res = await fetch('/setup/send?pw=' + pw + '&mode=' + mode);
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          log.textContent += decoder.decode(value);
+          log.scrollTop = log.scrollHeight;
+        }
+      } catch(err) {
+        log.textContent += 'Error: ' + err.message;
       }
     }
     </script>
