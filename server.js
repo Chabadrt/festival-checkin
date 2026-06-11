@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const QRCode = require('qrcode');
 
 const app = express();
 app.use(express.json());
@@ -28,6 +29,20 @@ function initGuests(guests) {
   });
   saveDB(db);
 }
+
+// QR code image endpoint — serves QR as real PNG for email clients
+app.get('/qr/:id', async (req, res) => {
+  const { id } = req.params;
+  const url = `${process.env.BASE_URL}/checkin?id=${id}`;
+  try {
+    const buffer = await QRCode.toBuffer(url, { width: 300, margin: 2 });
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).send('QR error');
+  }
+});
 
 // Check-in endpoint — volunteer scans QR, this page loads on their phone
 app.get('/checkin', (req, res) => {
