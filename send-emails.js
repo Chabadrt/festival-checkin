@@ -43,14 +43,9 @@ function loadGuests() {
   })).filter(g => g.email && g.firstName);
 }
 
-// ── Generate QR code as base64 PNG ──────────────────────────────────────────
-async function generateQR(id) {
-  const url = `${BASE_URL}/checkin?id=${id}`;
-  return await QRCode.toDataURL(url, {
-    width: 300,
-    margin: 2,
-    color: { dark: '#000000', light: '#ffffff' }
-  });
+// ── Generate QR code image URL (served by Railway) ──────────────────────────
+function generateQR(id) {
+  return `${BASE_URL}/qr/${id}`;
 }
 
 // ── Build email HTML ─────────────────────────────────────────────────────────
@@ -153,8 +148,8 @@ async function main() {
 
   for (const guest of guests) {
     try {
-      const qrDataUrl = await generateQR(guest.id);
-      const html = buildEmail(guest, qrDataUrl);
+      const qrUrl = generateQR(guest.id);
+      const html = buildEmail(guest, qrUrl);
 
       if (TEST_MODE) {
         // In test mode, send first 3 to your own email
