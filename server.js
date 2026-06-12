@@ -190,8 +190,9 @@ app.get('/admin', (req, res) => {
           <input type="email" id="addEmail" placeholder="Email *">
           <input type="text" id="addCity" placeholder="City (optional)">
         </div>
-        <button class="btn btn-blue" id="addGuestBtn" style="width:100%;margin-top:4px;" onclick="addGuest()">➕ Add Guest</button>
+        <button class="btn btn-blue" id="addGuestBtn" style="width:100%;margin-top:4px;" onclick="console.log('clicked'); addGuest();">➕ Add Guest</button>
         <div id="addMsg"></div>
+        <div id="debugMsg" style="font-size:0.8rem;color:#888;margin-top:4px;"></div>
       </div>
 
       <!-- Upload CSV -->
@@ -280,8 +281,7 @@ app.get('/admin', (req, res) => {
     </div>
 
     <script>
-    const pw = '${pw}';
-
+    const pw = "${req.query.pw}";
     function toast(msg, ok) {
       const t = document.getElementById('toast');
       t.textContent = msg;
@@ -321,6 +321,7 @@ app.get('/admin', (req, res) => {
     }
 
     async function addGuest() {
+      document.getElementById('debugMsg').textContent = 'Function called. pw=' + pw;
       const firstName = document.getElementById('addFirst').value.trim();
       const lastName = document.getElementById('addLast').value.trim();
       const email = document.getElementById('addEmail').value.trim();
