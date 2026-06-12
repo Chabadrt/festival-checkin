@@ -126,8 +126,17 @@ app.get('/admin', (req, res) => {
   const checkedIn = guests.filter(g => g.checkedIn).length;
   const emailedIds = new Set(db.emailed || []);
   const pendingDuplicates = db.pendingDuplicates || [];
+  const checkedInList = guests.filter(g => g.checkedIn).sort((a, b) => a.checkedInAt > b.checkedInAt ? -1 : 1);
+  const notCheckedIn = guests.filter(g => !g.checkedIn).sort((a, b) => a.lastName > b.lastName ? 1 : -1);
+  const pw = req.query.pw;
   
-  // Build duplicates HTML separately to avoid nested template literal issues
+  const checkedInRows = checkedInList.map(g =>
+    `<tr><td class="green">✓ ${g.firstName} ${g.lastName}</td><td>${g.city || '—'}</td><td>${g.checkedInAt}</td></tr>`
+  ).join('');
+
+  const notCheckedInRows = notCheckedIn.map(g =>
+    `<tr><td class="gray">${g.firstName} ${g.lastName}</td><td>${g.city || '—'}</td><td>${emailedIds.has(String(g.id)) ? '<span class="green">✓</span>' : '<span class="orange">Pending</span>'}</td></tr>`
+  ).join('');
   let duplicatesHTML = '';
   if (pendingDuplicates.length > 0) {
     const rows = pendingDuplicates.map(d => {
@@ -151,9 +160,6 @@ app.get('/admin', (req, res) => {
       <div id="dupMsg"></div>
     </div>`;
   }
-  const checkedInList = guests.filter(g => g.checkedIn).sort((a, b) => a.checkedInAt > b.checkedInAt ? -1 : 1);
-  const notCheckedIn = guests.filter(g => !g.checkedIn).sort((a, b) => a.lastName > b.lastName ? 1 : -1);
-  const pw = req.query.pw;
 
   res.send(`<!DOCTYPE html><html><head>
     <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -243,7 +249,7 @@ app.get('/admin', (req, res) => {
     <div class="card">
       <h2>📧 Send Emails</h2>
       <p style="font-size:0.8rem;color:#888;margin:0 0 10px;">⚠️ <b>Send to All</b> and <b>Send to New</b> should only be used once.</p>
-      <button class="btn btn-orange" onclick="sendEmails('test')">🧪 Test (3 to me)</button>
+      <button class="btn btn-orange" onclick="sendEmails('test')">🧪 Test (3 to Faith)</button>
       <button class="btn btn-blue" onclick="sendEmails('all')">📧 Send to All</button>
       <button class="btn btn-green" onclick="sendEmails('new')">✨ New Guests Only</button>
       <div class="section">
@@ -264,12 +270,7 @@ app.get('/admin', (req, res) => {
       <h2>✅ Checked in (${checkedIn})</h2>
       <table>
         <tr><th>Name</th><th>City</th><th>Time</th></tr>
-        ${checkedInList.map(g => `
-          <tr>
-            <td class="green">✓ ${g.firstName} ${g.lastName}</td>
-            <td>${g.city || '—'}</td>
-            <td>${g.checkedInAt}</td>
-          </tr>`).join('')}
+        ${checkedInRows}
       </table>
     </div>
 
@@ -278,12 +279,7 @@ app.get('/admin', (req, res) => {
       <h2>⏳ Not yet arrived (${total - checkedIn})</h2>
       <table>
         <tr><th>Name</th><th>City</th><th>Emailed</th></tr>
-        ${notCheckedIn.map(g => `
-          <tr>
-            <td class="gray">${g.firstName} ${g.lastName}</td>
-            <td>${g.city || '—'}</td>
-            <td>${emailedIds.has(String(g.id)) ? '<span class="green">✓</span>' : '<span class="orange">Pending</span>'}</td>
-          </tr>`).join('')}
+        ${notCheckedInRows}
       </table>
     </div>
 
@@ -613,7 +609,7 @@ app.get('/setup/send', async (req, res) => {
     let toSend = [];
     if (mode === 'test') {
       toSend = allGuests.slice(0, 3);
-      write(`TEST MODE — sending 3 emails to ${process.env.GMAIL_USER}`);
+      write(`TEST MODE — sending 3 emails to yourva.aly18@gmail.com`);
     } else if (mode === 'all') {
       toSend = allGuests;
       write(`Sending to ALL ${toSend.length} guests...`);
@@ -637,7 +633,7 @@ app.get('/setup/send', async (req, res) => {
     for (const guest of toSend) {
       try {
         const qrUrl = `${process.env.BASE_URL}/qr/${guest.id}`;
-        const to = mode === 'test' ? process.env.GMAIL_USER : guest.email;
+        const to = mode === 'test' ? 'yourva.aly18@gmail.com' : guest.email;
         await transporter.sendMail({
           from: `"Rabbi Benzion Silverman" <${process.env.GMAIL_USER}>`,
           to,
