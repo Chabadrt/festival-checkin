@@ -8,7 +8,9 @@ const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
 
-const DB_FILE = path.join(__dirname, 'checkins.json');
+const DATA_DIR = process.env.DATA_DIR || '/app/data';
+if (!require('fs').existsSync(DATA_DIR)) require('fs').mkdirSync(DATA_DIR, { recursive: true });
+const DB_FILE = path.join(DATA_DIR, 'checkins.json');
 
 function loadDB() {
   if (!fs.existsSync(DB_FILE)) return { guests: {}, checkins: [], emailed: [] };
@@ -122,7 +124,6 @@ app.get('/admin', (req, res) => {
 
   res.send(`<!DOCTYPE html><html><head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta http-equiv="refresh" content="30">
     <style>
     body{font-family:sans-serif;padding:20px;max-width:800px;margin:0 auto;background:#f5f5f5;}
     h1{color:#222;margin-bottom:4px;}
@@ -156,8 +157,9 @@ app.get('/admin', (req, res) => {
       <h2>Total checked in</h2>
       <div class="stat">${checkedIn} <span style="font-size:1.5rem;color:#aaa;">/ ${total}</span></div>
       <div class="progress"><div class="bar" style="width:${total > 0 ? Math.round(checkedIn/total*100) : 0}%"></div></div>
-      <div style="color:#888;font-size:0.8rem;margin-top:4px;">
-        ${emailedIds.size} emails sent · Page refreshes every 30 seconds
+      <div style="color:#888;font-size:0.8rem;margin-top:8px;display:flex;align-items:center;gap:12px;">
+        <span>${emailedIds.size} emails sent</span>
+        <button class="btn btn-gray" style="padding:5px 12px;font-size:0.8rem;" onclick="location.reload()">🔄 Refresh</button>
       </div>
     </div>
 
@@ -311,16 +313,19 @@ app.get('/admin', (req, res) => {
         showMsg('addMsg', false, 'First name, last name and email are required.'); return;
       }
       showMsg('addMsg', true, 'Adding...');
-      const r = await fetch('/setup/add-guest?pw=' + pw, {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ firstName, lastName, email, city })
-      });
-      const d = await r.json();
-      showMsg('addMsg', d.ok, d.message);
-      if (d.ok) {
-        ['addFirst','addLast','addEmail','addCity'].forEach(id => document.getElementById(id).value = '');
-        setTimeout(() => location.reload(), 1500);
+      try {
+        const r = await fetch('/setup/add-guest?pw=' + pw, {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ firstName, lastName, email, city })
+        });
+        const d = await r.json();
+        showMsg('addMsg', d.ok, d.message);
+        if (d.ok) {
+          ['addFirst','addLast','addEmail','addCity'].forEach(id => document.getElementById(id).value = '');
+        }
+      } catch(err) {
+        showMsg('addMsg', false, 'Error: ' + err.message);
       }
     }
 
