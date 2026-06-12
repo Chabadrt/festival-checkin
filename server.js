@@ -90,14 +90,20 @@ app.get('/admin', (req, res) => {
   var checkedInRows = '';
   for (var i = 0; i < checkedInList.length; i++) {
     var g = checkedInList[i];
-    checkedInRows += '<tr><td style="color:#389e0d">&#10003; ' + g.firstName + ' ' + g.lastName + '</td><td>' + (g.city || '&mdash;') + '</td><td>' + g.checkedInAt + '</td></tr>';
+    var fn = (g.firstName||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    var ln = (g.lastName||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    var ct = (g.city||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    checkedInRows += '<tr><td style="color:#389e0d">&#10003; ' + fn + ' ' + ln + '</td><td>' + (ct||'&mdash;') + '</td><td>' + g.checkedInAt + '</td></tr>';
   }
 
   var notCheckedInRows = '';
   for (var i = 0; i < notCheckedIn.length; i++) {
     var g = notCheckedIn[i];
+    var fn = (g.firstName||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    var ln = (g.lastName||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    var ct = (g.city||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     var emailed = emailedIds.indexOf(String(g.id)) >= 0 ? '<span style="color:#389e0d">&#10003;</span>' : '<span style="color:#d48806">Pending</span>';
-    notCheckedInRows += '<tr><td style="color:#aaa">' + g.firstName + ' ' + g.lastName + '</td><td>' + (g.city || '&mdash;') + '</td><td>' + emailed + '</td></tr>';
+    notCheckedInRows += '<tr><td style="color:#aaa">' + fn + ' ' + ln + '</td><td>' + (ct||'&mdash;') + '</td><td>' + emailed + '</td></tr>';
   }
 
   var pct = total > 0 ? Math.round(checkedIn / total * 100) : 0;
@@ -284,7 +290,7 @@ app.get('/admin', (req, res) => {
   html += '  }';
   html += '  if (mode === "all" && !confirm("Send to ALL guests? Only do this once!")) return;';
   html += '  var log = document.getElementById("log");';
-  html += '  log.style.display = "block"; log.textContent = "Starting...\n";';
+  html += '  log.style.display = "block"; log.textContent = "Starting..." + String.fromCharCode(10);';
   html += '  toast("Sending...", true);';
   html += '  fetch(url).then(function(r){';
   html += '    var reader = r.body.getReader();';
