@@ -126,6 +126,31 @@ app.get('/admin', (req, res) => {
   const checkedIn = guests.filter(g => g.checkedIn).length;
   const emailedIds = new Set(db.emailed || []);
   const pendingDuplicates = db.pendingDuplicates || [];
+  
+  // Build duplicates HTML separately to avoid nested template literal issues
+  let duplicatesHTML = '';
+  if (pendingDuplicates.length > 0) {
+    const rows = pendingDuplicates.map(d => {
+      const aId = String(d.a.id).replace(/'/g, '');
+      const bId = String(d.b.id).replace(/'/g, '');
+      return `<tr>
+        <td>${d.a.firstName} ${d.a.lastName}<br><small style="color:#aaa">${d.a.email}</small></td>
+        <td>${d.b.firstName} ${d.b.lastName}<br><small style="color:#aaa">${d.b.email}</small></td>
+        <td style="color:#d48806;font-size:0.8rem;">${d.reason}</td>
+        <td>
+          <button class="btn btn-red" style="font-size:0.75rem;padding:5px 8px;margin:2px;" onclick="removeGuest('${aId}')">Remove A</button>
+          <button class="btn btn-red" style="font-size:0.75rem;padding:5px 8px;margin:2px;" onclick="removeGuest('${bId}')">Remove B</button>
+          <button class="btn btn-gray" style="font-size:0.75rem;padding:5px 8px;margin:2px;" onclick="dismissDuplicate('${aId}','${bId}')">Keep Both</button>
+        </td>
+      </tr>`;
+    }).join('');
+    duplicatesHTML = `<div class="card" style="border:2px solid #faad14;">
+      <h2>⚠️ Possible Duplicates — Review Required (${pendingDuplicates.length})</h2>
+      <table><tr><th>Guest A</th><th>Guest B</th><th>Reason</th><th>Action</th></tr>
+      ${rows}</table>
+      <div id="dupMsg"></div>
+    </div>`;
+  }
   const checkedInList = guests.filter(g => g.checkedIn).sort((a, b) => a.checkedInAt > b.checkedInAt ? -1 : 1);
   const notCheckedIn = guests.filter(g => !g.checkedIn).sort((a, b) => a.lastName > b.lastName ? 1 : -1);
   const pw = req.query.pw;
@@ -232,25 +257,7 @@ app.get('/admin', (req, res) => {
     </div>
 
     <!-- Pending Duplicates -->
-    ${pendingDuplicates.length > 0 ? `
-    <div class="card" style="border:2px solid #faad14;">
-      <h2>⚠️ Possible Duplicates — Review Required (${pendingDuplicates.length})</h2>
-      <table>
-        <tr><th>Guest A</th><th>Guest B</th><th>Reason</th><th>Action</th></tr>
-        ${pendingDuplicates.map(d => `
-          <tr>
-            <td>${d.a.firstName} ${d.a.lastName}<br><small style="color:#aaa">${d.a.email}</small></td>
-            <td>${d.b.firstName} ${d.b.lastName}<br><small style="color:#aaa">${d.b.email}</small></td>
-            <td style="color:#d48806;font-size:0.8rem;">${d.reason}</td>
-            <td>
-              <button class="btn btn-red" style="font-size:0.75rem;padding:5px 8px;margin:2px;" onclick="removeGuest('${d.a.id}')">Remove A</button>
-              <button class="btn btn-red" style="font-size:0.75rem;padding:5px 8px;margin:2px;" onclick="removeGuest('${d.b.id}')">Remove B</button>
-              <button class="btn btn-gray" style="font-size:0.75rem;padding:5px 8px;margin:2px;" onclick="dismissDuplicate('${d.a.id}','${d.b.id}')">Keep Both</button>
-            </td>
-          </tr>`).join('')}
-      </table>
-      <div id="dupMsg"></div>
-    </div>` : ''}
+    ${duplicatesHTML}
 
     <!-- Checked In -->
     <div class="card">
