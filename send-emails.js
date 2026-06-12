@@ -71,7 +71,7 @@ function buildEmail(guest, qrDataUrl) {
   </p>
 
   <p style="font-size:1rem;line-height:1.7;">
-    <strong>Your personal check-in code is below.</strong> When you arrive, simply show this 
+    <strong>Your family check-in code is below.</strong> When you arrive, simply show this 
     to our volunteers at the entrance and you'll be checked right in.
   </p>
 
@@ -89,7 +89,7 @@ function buildEmail(guest, qrDataUrl) {
       <tr><td style="padding:6px 0;">🕐</td><td style="padding:6px 0;">1:00–3:00 PM</td></tr>
       <tr><td style="padding:6px 0;">🅿️</td><td style="padding:6px 0;">Plenty of parking right by the park. Police have confirmed no ticketing in the area.</td></tr>
       <tr><td style="padding:6px 0;">🔒</td><td style="padding:6px 0;">Uniformed police presence + private security on site. Come with confidence.</td></tr>
-      <tr><td style="padding:6px 0;">🪑</td><td style="padding:6px 0;">Bring a lawn chair — enjoy the music by the river.</td></tr>
+      <tr><td style="padding:6px 0;">🪑</td><td style="padding:6px 0;"><strong>Bring a lawn chair</strong> — enjoy the music and the beautiful day by the river.</td></tr>
       <tr><td style="padding:6px 0;">☀️</td><td style="padding:6px 0;">Bring sunscreen and your appetite.</td></tr>
       <tr><td style="padding:6px 0;">🍽️</td><td style="padding:6px 0;">Israeli street food, Kona Ice, and more. Food available for purchase. Kids activities are free.</td></tr>
       <tr><td style="padding:6px 0;">⏰</td><td style="padding:6px 0;">Arriving around 12:45 means you'll settle in right as the music starts.</td></tr>
